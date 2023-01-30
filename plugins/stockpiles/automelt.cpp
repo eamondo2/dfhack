@@ -57,9 +57,6 @@ static const string CONFIG_KEY = string(plugin_name) + "/config";
 static const string STOCKPILE_CONFIG_KEY_PREFIX = string(plugin_name) + "/stockpile/";
 static PersistentDataItem config;
 
-// static vector<PersistentDataItem> watched_stockpiles;
-// static unordered_map<int, size_t> watched_stockpiles_indices;
-
 static unordered_map<int32_t, PersistentDataItem> watched_stockpiles;
 
 enum StockpileConfigValues
