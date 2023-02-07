@@ -2,12 +2,14 @@ project(stockpiles)
 
 # add *our* headers here.
 set(PROJECT_HDRS
+    StockpileIO.h
     StockpileUtils.h
     OrganicMatLookup.h
     StockpileSerializer.h
 )
 
 set(PROJECT_SRCS
+    StockpileIO.cpp
     OrganicMatLookup.cpp
     StockpileSerializer.cpp
     stockpiles.cpp

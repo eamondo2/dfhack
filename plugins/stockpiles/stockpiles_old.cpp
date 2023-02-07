@@ -31,6 +31,8 @@
 #include <functional>
 #include <vector>
 
+#include "stockpiles_io.h"
+
 using std::vector;
 using std::string;
 using std::endl;

@@ -1,3 +1,4 @@
+// Includes from automelt
 #include "Debug.h"
 #include "LuaTools.h"
 #include "PluginManager.h"
@@ -22,6 +23,30 @@
 #include "df/plotinfost.h"
 #include "df/item_quality.h"
 
+// Includes from original stockpiles
+#include "Core.h"
+#include "Console.h"
+#include "Export.h"
+#include "DataFuncs.h"
+#include "DataDefs.h"
+
+#include "StockpileSerializer.h"
+#include "StockpileUtils.h"
+
+#include "df/world_data.h"
+#include "df/stockpile_settings.h"
+#include "df/global_objects.h"
+
+#include "modules/Filesystem.h"
+#include "modules/Gui.h"
+#include "modules/Filesystem.h"
+
+// Generic includes
+#include <functional>
+#include <vector>
+
+#include "StockpileIO.h"
+
 #include <map>
 #include <unordered_map>
 
@@ -36,12 +61,17 @@ using std::vector;
 using namespace DFHack;
 using namespace df::enums;
 
+using std::endl;
+using namespace google::protobuf;
+using namespace dfstockpiles;
+
 DFHACK_PLUGIN("stockpiles");
 DFHACK_PLUGIN_IS_ENABLED(is_enabled);
 REQUIRE_GLOBAL(gps);
 REQUIRE_GLOBAL(world);
 REQUIRE_GLOBAL(cursor);
 REQUIRE_GLOBAL(plotinfo);
+REQUIRE_GLOBAL(selection_rect);
 
 namespace DFHack
 {
@@ -56,6 +86,7 @@ static PersistentDataItem config;
 
 
 static unordered_map<int32_t, PersistentDataItem> watched_stockpiles;
+
 
 enum StockpileConfigValues
 {
@@ -137,6 +168,22 @@ DFhackCExport command_result plugin_init(color_ostream &out, std::vector<PluginC
         plugin_name,
         "Manage stockpile behavior",
         do_command));
+    // TODO: Implement these via LUA and cb to c++ bindings
+    // commands.push_back(PluginCommand(
+    //     "copystock",
+    //     "Copy stockpile under cursor.",
+    //     copystock,
+    //     copystock_guard));
+    // commands.push_back(PluginCommand(
+    //     "savestock",
+    //     "Save the active stockpile's settings to a file.",
+    //     savestock,
+    //     savestock_guard));
+    // commands.push_back(PluginCommand(
+    //     "loadstock",
+    //     "Load and apply stockpile settings from a file.",
+    //     loadstock,
+    //     loadstock_guard));
 
     return CR_OK;
 }
@@ -213,3 +260,36 @@ DFhackCExport command_result plugin_onupdate(color_ostream &out)
     }
     return CR_OK;
 }
+
+static bool call_stockpiles_lua(color_ostream *out, const char *fn_name,
+        int nargs = 0, int nres = 0,
+        Lua::LuaLambda && args_lambda = Lua::DEFAULT_LUA_LAMBDA,
+        Lua::LuaLambda && res_lambda = Lua::DEFAULT_LUA_LAMBDA) {
+    DEBUG(status).print("calling stockpiles lua function: '%s'\n", fn_name);
+
+    CoreSuspender guard;
+
+    auto L = Lua::Core::State;
+    Lua::StackUnwinder top(L);
+
+    if (!out)
+        out = &Core::getInstance().getConsole();
+
+    return Lua::CallLuaModuleFunction(*out, L, "plugins.stockpiles", fn_name,
+            nargs, nres,
+            std::forward<Lua::LuaLambda&&>(args_lambda),
+            std::forward<Lua::LuaLambda&&>(res_lambda));
+}
+
+DFHACK_PLUGIN_LUA_FUNCTIONS
+{
+    DFHACK_LUA_FUNCTION ( stockpiles_load ),
+    DFHACK_LUA_FUNCTION ( stockpiles_save ),
+    DFHACK_LUA_END
+};
+
+DFHACK_PLUGIN_LUA_COMMANDS
+{
+    DFHACK_LUA_COMMAND ( stockpiles_list_settings ),
+    DFHACK_LUA_END
+};
