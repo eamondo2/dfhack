@@ -950,25 +950,36 @@ Screens
   Returns the topmost viewscreen. If ``skip_dismissed`` is *true*,
   ignores screens already marked to be removed.
 
-* ``dfhack.gui.getFocusString(viewscreen)``
+* ``dfhack.gui.getFocusStrings(viewscreen)``
 
-  Returns a string representation of the current focus position
-  in the ui. The string has a "screen/foo/bar/baz..." format.
+  Returns a table of string representations of the current UI focuses.
+  The strings have a "screen/foo/bar/baz..." format e.g..::
+
+    [1] = "dwarfmode/Info/CREATURES/CITIZEN"
+    [2] = "dwardmode/Squads"
+
+* ``dfhack.gui.matchFocusString(focus_string[, viewscreen])``
+
+  Returns ``true`` if the given ``focus_string`` is found in the current
+  focus strings, or as a prefix to any of the focus strings, or ``false``
+  if no match is found. Matching is case insensitive. If ``viewscreen`` is
+  specified, gets the focus strings to match from the given viewscreen.
 
 * ``dfhack.gui.getCurFocus([skip_dismissed])``
 
   Returns the focus string of the current viewscreen.
 
-* ``dfhack.gui.getViewscreenByType(type [, depth])``
+* ``dfhack.gui.getViewscreenByType(type[, depth])``
 
   Returns the topmost viewscreen out of the top ``depth`` viewscreens with
   the specified type (e.g. ``df.viewscreen_titlest``), or ``nil`` if none match.
   If ``depth`` is not specified or is less than 1, all viewscreens are checked.
 
-* ``dfhack.gui.getDFViewscreen([skip_dismissed])``
+* ``dfhack.gui.getDFViewscreen([skip_dismissed[, viewscreen]])``
 
   Returns the topmost viewscreen not owned by DFHack. If ``skip_dismissed`` is
-  ``true``, ignores screens already marked to be removed.
+  ``true``, ignores screens already marked to be removed. If ``viewscreen`` is
+  specified, starts the scan at the given viewscreen.
 
 General-purpose selections
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2292,6 +2303,12 @@ a table with the following possible fields:
   ``write_to_lower``
     If set to true, the specified ``tile`` will be written to the background
     instead of the foreground.
+  ``top_of_text``
+    If set to true, the specified ``tile`` will have the top half of the specified
+    ``ch`` character superimposed over the lower half of the tile.
+  ``bottom_of_text``
+    If set to true, the specified ``tile`` will have the bottom half of the specified
+    ``ch`` character superimposed over the top half of the tile.
 
 Alternatively, it may be a pre-parsed native object with the following API:
 
@@ -4187,6 +4204,12 @@ ZScreen provides the following functions:
 
 ZScreen subclasses can set the following attributes:
 
+* ``defocusable`` (default: ``true``)
+
+  Whether the ZScreen loses keyboard focus when the player clicks on an area
+  of the screen other than the tool window. If the player clicks on a different
+  ZScreen window, focus still transfers to that other ZScreen.
+
 * ``initial_pause`` (default: ``DEFAULT_INITIAL_PAUSE``)
 
   Whether to pause the game when the ZScreen is shown. ``DEFAULT_INITIAL_PAUSE``
@@ -4658,7 +4681,8 @@ containing newlines, or a table with the following possible fields:
 
 * ``token.tile = pen``
 
-  Specifies a pen to paint as one tile before the main part of the token.
+  Specifies a pen or texture index to paint as one tile before the main part of
+  the token.
 
 * ``token.width = ...``
 
@@ -4793,6 +4817,7 @@ cycle through by pressing a specified hotkey or clicking on the text.
 It has the following attributes:
 
 :key: The hotkey keycode to display, e.g. ``'CUSTOM_A'``.
+:key_back: Similar to ``key``, but will cycle backwards (optional)
 :label: The string (or a function that returns a string) to display after the
     hotkey.
 :label_width: The number of spaces to allocate to the ``label`` (for use in
@@ -4810,9 +4835,10 @@ the ``option_idx`` instance variable.
 
 The CycleHotkeyLabel widget implements the following methods:
 
-* ``cyclehotkeylabel:cycle()``
+* ``cyclehotkeylabel:cycle([backwards])``
 
     Cycles the selected option and triggers the ``on_change`` callback.
+    If ``backwards`` is defined and is truthy, the cycle direction will be reversed
 
 * ``cyclehotkeylabel:setOption(value_or_index, call_on_change)``
 
@@ -4862,6 +4888,10 @@ It has the following attributes:
             key/click and calls the callback as ``on_submit(index,choice)``.
 :on_submit2: Shift-click callback; if specified, the list reacts to the click and
              calls the callback as ``on_submit2(index,choice)``.
+:on_double_click: Mouse double click callback; if specified, the list reacts to the
+            click and calls the callback as ``on_double_click(index,choice)``.
+:on_double_click2: Shift-double click callback; if specified, the list reacts to the click and
+             calls the callback as ``on_double_click2(index,choice)``.
 :row_height: Height of every row in text lines.
 :icon_width: If not *nil*, the specified number of character columns
              are reserved to the left of the list item for the icons.

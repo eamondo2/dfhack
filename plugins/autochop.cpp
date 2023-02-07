@@ -7,6 +7,7 @@
 
 #include "modules/Burrows.h"
 #include "modules/Designations.h"
+#include "modules/Items.h"
 #include "modules/Maps.h"
 #include "modules/Persistence.h"
 #include "modules/Units.h"
@@ -142,6 +143,8 @@ DFhackCExport command_result plugin_enable(color_ostream &out, bool enable) {
         DEBUG(status,out).print("%s from the API; persisting\n",
                                 is_enabled ? "enabled" : "disabled");
         set_config_bool(config, CONFIG_IS_ENABLED, is_enabled);
+        if (enable)
+            do_cycle(out, true);
     } else {
         DEBUG(status,out).print("%s from the API, but already %s; no action\n",
                                 is_enabled ? "enabled" : "disabled",
@@ -157,6 +160,7 @@ DFhackCExport command_result plugin_shutdown (color_ostream &out) {
 }
 
 DFhackCExport command_result plugin_load_data (color_ostream &out) {
+    cycle_timestamp = 0;
     config = World::GetPersistentData(CONFIG_KEY);
 
     if (!config.isValid()) {
@@ -253,9 +257,10 @@ static command_result do_command(color_ostream &out, vector<string> &parameters)
 // cycle logic
 //
 
-static bool is_accessible_item(const df::coord &pos, const vector<df::unit *> &citizens) {
+static bool is_accessible_item(df::item *item, const vector<df::unit *> &citizens) {
+    const df::coord pos = Items::getPosition(item);
     for (auto &unit : citizens) {
-        if (Maps::canWalkBetween(unit->pos, pos))
+        if (Maps::canWalkBetween(Units::getPosition(unit), pos))
             return true;
     }
     return false;
@@ -324,16 +329,23 @@ static bool is_protected(const df::plant * plant, PersistentDataItem &c) {
 }
 
 static int32_t estimate_logs(const df::plant *plant) {
+    if (!plant->tree_info)
+        return 0;
+
     //adapted from code by aljohnston112 @ github
     df::plant_tree_tile** tiles = plant->tree_info->body;
-    df::plant_tree_tile* tilesRow;
 
-    int trunks = 0;
+    if (!tiles)
+        return 0;
+
+    int32_t trunks = 0;
+    const int32_t area = plant->tree_info->dim_y * plant->tree_info->dim_x;
     for (int i = 0; i < plant->tree_info->body_height; i++) {
-        tilesRow = tiles[i];
-        for (int j = 0; j < plant->tree_info->dim_y*plant->tree_info->dim_x; j++) {
+        df::plant_tree_tile* tilesRow = tiles[i];
+        if (!tilesRow)
+            return 0; // tree data is corrupt; let's not touch it
+        for (int j = 0; j < area; j++)
             trunks += tilesRow[j].bits.trunk;
-        }
     }
 
     return trunks;
@@ -383,6 +395,55 @@ static void bucket_watched_burrows(color_ostream & out,
 
 typedef multimap<int, df::plant *, std::greater<int>> TreesBySize;
 
+static int32_t scan_tree(color_ostream & out, df::plant *plant, int32_t *expected_yield,
+        TreesBySize *designatable_trees_by_size, bool designate_clearcut,
+        const vector<df::unit *> &citizens, int32_t *accessible_trees,
+        int32_t *inaccessible_trees, int32_t *designated_trees, int32_t *accessible_yield,
+        map<int32_t, int32_t> *tree_counts,
+        map<int32_t, int32_t> *designated_tree_counts,
+        map<int, PersistentDataItem *> &clearcut_burrows,
+        map<int, PersistentDataItem *> &chop_burrows) {
+    TRACE(cycle,out).print("  scanning tree at %d,%d,%d\n",
+                            plant->pos.x, plant->pos.y, plant->pos.z);
+
+    if (!is_valid_tree(plant))
+        return 0;
+
+    bool accessible = is_accessible_tree(plant->pos, citizens);
+    int32_t yield = estimate_logs(plant);
+
+    if (accessible) {
+        if (accessible_trees)
+            ++*accessible_trees;
+        if (accessible_yield)
+            *accessible_yield += yield;
+    } else {
+        if (inaccessible_trees)
+            ++*inaccessible_trees;
+    }
+
+    bool can_chop = false;
+    bool designated = Designations::isPlantMarked(plant);
+    bool was_designated = designated;
+    bucket_tree(plant, designate_clearcut, &designated, &can_chop, tree_counts,
+            designated_tree_counts, clearcut_burrows, chop_burrows);
+
+    int32_t ret = 0;
+    if (designated) {
+        if (!was_designated)
+            ret = 1;
+        if (designated_trees)
+            ++*designated_trees;
+        if (expected_yield)
+            *expected_yield += yield;
+    } else if (can_chop && accessible) {
+        if (designatable_trees_by_size)
+            designatable_trees_by_size->emplace(yield, plant);
+    }
+
+    return ret;
+}
+
 // returns the number of trees that were newly marked
 static int32_t scan_trees(color_ostream & out, int32_t *expected_yield,
         TreesBySize *designatable_trees_by_size, bool designate_clearcut,
@@ -391,6 +452,7 @@ static int32_t scan_trees(color_ostream & out, int32_t *expected_yield,
         int32_t *accessible_yield = NULL,
         map<int32_t, int32_t> *tree_counts = NULL,
         map<int32_t, int32_t> *designated_tree_counts = NULL) {
+    TRACE(cycle,out).print("scanning trees\n");
     int32_t newly_marked = 0;
 
     if (accessible_trees)
@@ -411,41 +473,18 @@ static int32_t scan_trees(color_ostream & out, int32_t *expected_yield,
     map<int, PersistentDataItem *> clearcut_burrows, chop_burrows;
     bucket_watched_burrows(out, clearcut_burrows, chop_burrows);
 
-    for (auto plant : world->plants.all) {
-        if (!is_valid_tree(plant))
-            continue;
-
-        bool accessible = is_accessible_tree(plant->pos, citizens);
-        int32_t yield = estimate_logs(plant);
-
-        if (accessible) {
-            if (accessible_trees)
-                ++*accessible_trees;
-            if (accessible_yield)
-                *accessible_yield += yield;
-        } else {
-            if (inaccessible_trees)
-                ++*inaccessible_trees;
-        }
-
-        bool can_chop = false;
-        bool designated = Designations::isPlantMarked(plant);
-        bool was_designated = designated;
-        bucket_tree(plant, designate_clearcut, &designated, &can_chop, tree_counts,
-                designated_tree_counts, clearcut_burrows, chop_burrows);
-
-        if (designated) {
-            if (!was_designated)
-                ++newly_marked;
-            if (designated_trees)
-                ++*designated_trees;
-            if (expected_yield)
-                *expected_yield += yield;
-        } else if (can_chop && accessible) {
-            if (designatable_trees_by_size)
-                designatable_trees_by_size->emplace(yield, plant);
-        }
-    }
+    for (auto plant : world->plants.tree_dry)
+        newly_marked += scan_tree(out, plant, expected_yield, designatable_trees_by_size,
+                                  designate_clearcut, citizens, accessible_trees,
+                                  inaccessible_trees, designated_trees, accessible_yield,
+                                  tree_counts, designated_tree_counts,
+                                  clearcut_burrows, chop_burrows);
+    for (auto plant : world->plants.tree_wet)
+        newly_marked += scan_tree(out, plant, expected_yield, designatable_trees_by_size,
+                                  designate_clearcut, citizens, accessible_trees,
+                                  inaccessible_trees, designated_trees, accessible_yield,
+                                  tree_counts, designated_tree_counts,
+                                  clearcut_burrows, chop_burrows);
 
     return newly_marked;
 }
@@ -500,15 +539,18 @@ struct BadFlags
     }
 };
 
-static void scan_logs(int32_t *usable_logs, const vector<df::unit *> &citizens, int32_t *inaccessible_logs = NULL) {
+static void scan_logs(color_ostream &out, int32_t *usable_logs,
+                      const vector<df::unit *> &citizens, int32_t *inaccessible_logs = NULL) {
     static const BadFlags bad_flags;
 
+    TRACE(cycle,out).print("scanning logs\n");
     if (usable_logs)
         *usable_logs = 0;
     if (inaccessible_logs)
         *inaccessible_logs = 0;
 
     for (auto &item : world->items.other[items_other_id::IN_PLAY]) {
+        TRACE(cycle,out).print("  scanning log %d\n", item->id);
         if (item->flags.whole & bad_flags.whole)
             continue;
 
@@ -518,7 +560,7 @@ static void scan_logs(int32_t *usable_logs, const vector<df::unit *> &citizens, 
         if (!is_valid_item(item))
             continue;
 
-        if (!is_accessible_item(item->pos, citizens)) {
+        if (!is_accessible_item(item, citizens)) {
             if (inaccessible_logs)
                 ++*inaccessible_logs;
         } else if (usable_logs) {
@@ -545,7 +587,7 @@ static int32_t do_cycle(color_ostream &out, bool force_designate) {
 
     // check how many logs we have already
     int32_t usable_logs;
-    scan_logs(&usable_logs, citizens);
+    scan_logs(out, &usable_logs, citizens);
 
     if (get_config_bool(config, CONFIG_WAITING_FOR_MIN)
             && usable_logs <= get_config_val(config, CONFIG_MIN_LOGS)) {
@@ -628,7 +670,7 @@ static void autochop_printStatus(color_ostream &out) {
     map<int32_t, int32_t> tree_counts, designated_tree_counts;
     vector<df::unit *> citizens;
     Units::getCitizens(citizens);
-    scan_logs(&usable_logs, citizens, &inaccessible_logs);
+    scan_logs(out, &usable_logs, citizens, &inaccessible_logs);
     scan_trees(out, &expected_yield, NULL, false, citizens, &accessible_trees, &inaccessible_trees,
             &designated_trees, &accessible_yield, &tree_counts, &designated_tree_counts);
 
@@ -733,7 +775,7 @@ static int autochop_getLogCounts(lua_State *L) {
     int32_t usable_logs, inaccessible_logs;
     vector<df::unit *> citizens;
     Units::getCitizens(citizens);
-    scan_logs(&usable_logs, citizens, &inaccessible_logs);
+    scan_logs(*out, &usable_logs, citizens, &inaccessible_logs);
     Lua::Push(L, usable_logs);
     Lua::Push(L, inaccessible_logs);
     return 2;

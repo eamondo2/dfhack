@@ -222,6 +222,8 @@ static void decode_pen(lua_State *L, Pen &pen, int idx)
 
     get_bool_field(L, &pen.keep_lower, idx, "keep_lower", false);
     get_bool_field(L, &pen.write_to_lower, idx, "write_to_lower", false);
+    get_bool_field(L, &pen.top_of_text, idx, "top_of_text", false);
+    get_bool_field(L, &pen.bottom_of_text, idx, "bottom_of_text", false);
 }
 
 /**************************************************
@@ -1469,13 +1471,12 @@ static int gui_getMousePos(lua_State *L)
 static const LuaWrapper::FunctionReg dfhack_gui_module[] = {
     WRAPM(Gui, getCurViewscreen),
     WRAPM(Gui, getDFViewscreen),
-    WRAPM(Gui, getFocusString),
-    WRAPM(Gui, getCurFocus),
     WRAPM(Gui, getSelectedWorkshopJob),
     WRAPM(Gui, getSelectedJob),
     WRAPM(Gui, getSelectedUnit),
     WRAPM(Gui, getSelectedItem),
     WRAPM(Gui, getSelectedBuilding),
+    WRAPM(Gui, getSelectedStockpile),
     WRAPM(Gui, getSelectedPlant),
     WRAPM(Gui, getAnyUnit),
     WRAPM(Gui, getAnyItem),
@@ -1493,8 +1494,23 @@ static const LuaWrapper::FunctionReg dfhack_gui_module[] = {
     WRAPM(Gui, refreshSidebar),
     WRAPM(Gui, inRenameBuilding),
     WRAPM(Gui, getDepthAt),
+    WRAPM(Gui, matchFocusString),
     { NULL, NULL }
 };
+
+static int gui_getFocusStrings(lua_State *state) {
+    df::viewscreen *r = Lua::GetDFObject<df::viewscreen>(state, 1);
+    std::vector<std::string> focusStrings = Gui::getFocusStrings(r);
+    Lua::PushVector(state, focusStrings);
+    return 1;
+}
+
+static int gui_getCurFocus(lua_State *state) {
+    bool skip_dismissed = lua_toboolean(state, 1);
+    std::vector<std::string> cur_focus = Gui::getCurFocus(skip_dismissed);
+    Lua::PushVector(state, cur_focus);
+    return 1;
+}
 
 static int gui_autoDFAnnouncement(lua_State *state)
 {
@@ -1621,6 +1637,8 @@ static const luaL_Reg dfhack_gui_funcs[] = {
     { "pauseRecenter", gui_pauseRecenter },
     { "revealInDwarfmodeMap", gui_revealInDwarfmodeMap },
     { "getMousePos", gui_getMousePos },
+    { "getFocusStrings", gui_getFocusStrings },
+    { "getCurFocus", gui_getCurFocus },
     { NULL, NULL }
 };
 
@@ -1694,6 +1712,7 @@ static const LuaWrapper::FunctionReg dfhack_textures_module[] = {
     WRAPM(Textures, getRedPinTexposStart),
     WRAPM(Textures, getIconsTexposStart),
     WRAPM(Textures, getOnOffTexposStart),
+    WRAPM(Textures, getControlPanelTexposStart),
     WRAPM(Textures, getThinBordersTexposStart),
     WRAPM(Textures, getMediumBordersTexposStart),
     WRAPM(Textures, getPanelBordersTexposStart),

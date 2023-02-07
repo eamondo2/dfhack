@@ -155,14 +155,18 @@ static bool doSetTile_default(const Pen &pen, int x, int y, bool map)
     long *texpos_lower = &gps->screentexpos_lower[index];
     uint32_t *flag = &gps->screentexpos_flag[index];
 
+    // keep SCREENTEXPOS_FLAG_ANCHOR_SUBORDINATE so occluded anchored textures
+    // don't appear corrupted
+    uint32_t flag_mask = 0x4;
+    if (pen.write_to_lower)
+        flag_mask |= 0x18;
+
     *screen = 0;
     *texpos = 0;
     if (!pen.keep_lower)
         *texpos_lower = 0;
     gps->screentexpos_anchored[index] = 0;
-    // keep SCREENTEXPOS_FLAG_ANCHOR_SUBORDINATE so occluded anchored textures
-    // don't appear corrupted
-    *flag &= 4;
+    *flag &= flag_mask;
 
     if (gps->top_in_use) {
         screen = &gps->screen_top[index * 8];
@@ -175,7 +179,7 @@ static bool doSetTile_default(const Pen &pen, int x, int y, bool map)
         if (!pen.keep_lower)
             *texpos_lower = 0;
         gps->screentexpos_top_anchored[index] = 0;
-        *flag &= 4; // keep SCREENTEXPOS_FLAG_ANCHOR_SUBORDINATE
+        *flag &= flag_mask;
     }
 
     uint8_t fg = pen.fg | (pen.bold << 3);
@@ -196,6 +200,14 @@ static bool doSetTile_default(const Pen &pen, int x, int y, bool map)
             *texpos_lower = pen.tile;
         else
             *texpos = pen.tile;
+
+        if (pen.top_of_text || pen.bottom_of_text) {
+            screen[0] = uint8_t(pen.ch);
+            if (pen.top_of_text)
+                *flag |= 0x8;
+            if (pen.bottom_of_text)
+                *flag |= 0x10;
+        }
     } else if (pen.ch) {
         screen[0] = uint8_t(pen.ch);
         *texpos_lower = 909; // basic black background
@@ -853,6 +865,9 @@ void dfhack_lua_viewscreen::update_focus(lua_State *L, int idx)
     lua_getfield(L, idx, "allow_options");
     allow_options = lua_toboolean(L, -1);
     lua_pop(L, 1);
+    lua_getfield(L, idx, "defocused");
+    defocused = lua_toboolean(L, -1);
+    lua_pop(L, 1);
 
     lua_getfield(L, idx, "focus_path");
     auto str = lua_tostring(L, -1);
@@ -1069,6 +1084,7 @@ using df::identity_traits;
 #define CUR_STRUCT dfhack_viewscreen
 static const struct_field_info dfhack_viewscreen_fields[] = {
     { METHOD(OBJ_METHOD, is_lua_screen), 0, 0 },
+    { METHOD(OBJ_METHOD, isFocused), 0, 0 },
     { METHOD(OBJ_METHOD, getFocusString), 0, 0 },
     { METHOD(OBJ_METHOD, onShow), 0, 0 },
     { METHOD(OBJ_METHOD, onDismiss), 0, 0 },
