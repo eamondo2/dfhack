@@ -9,6 +9,7 @@
 #include "df/world.h"
 #include "df/building_nest_boxst.h"
 #include "df/item.h"
+#include "df/item_eggst.h"
 #include "df/unit.h"
 
 using std::string;
@@ -50,7 +51,7 @@ static void set_config_bool(PersistentDataItem &c, int index, bool value) {
     set_config_val(c, index, value ? 1 : 0);
 }
 
-static const int32_t CYCLE_TICKS = 100; // need to react quickly if eggs are unforbidden
+static const int32_t CYCLE_TICKS = 50; // need to react quickly when eggs are laid/unforbidden
 static int32_t cycle_timestamp = 0;  // world->frame_counter at last cycle
 
 static void do_cycle(color_ostream &out);
@@ -140,8 +141,8 @@ static void do_cycle(color_ostream &out) {
                 fertile = true;
         }
         for (auto &contained_item : nb->contained_items) {
-            df::item *item = contained_item->item;
-            if (item->flags.bits.forbid != fertile) {
+            auto *item = virtual_cast<df::item_eggst>(contained_item->item);
+            if (item && item->flags.bits.forbid != fertile) {
                 item->flags.bits.forbid = fertile;
                 if (fertile && item->flags.bits.in_job) {
                     // cancel any job involving the egg
