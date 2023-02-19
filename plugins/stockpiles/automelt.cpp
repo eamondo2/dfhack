@@ -186,6 +186,7 @@ DFhackCExport command_result plugin_onstatechange(color_ostream &out, state_chan
     return CR_OK;
 }
 
+
 DFhackCExport command_result plugin_onupdate(color_ostream &out)
 {
     if (!Core::getInstance().isWorldLoaded())

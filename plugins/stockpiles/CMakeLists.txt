@@ -1,7 +1,11 @@
 project(stockpiles)
 
+include_directories(include)
+
 # add *our* headers here.
 set(PROJECT_HDRS
+    Automelt.h
+    Autotrade.h
     StockpileIO.h
     StockpileUtils.h
     OrganicMatLookup.h
@@ -9,6 +13,8 @@ set(PROJECT_HDRS
 )
 
 set(PROJECT_SRCS
+    Automelt.cpp
+    Autotrade.cpp
     StockpileIO.cpp
     OrganicMatLookup.cpp
     StockpileSerializer.cpp

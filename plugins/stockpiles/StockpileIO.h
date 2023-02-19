@@ -44,24 +44,24 @@ using namespace dfstockpiles;
 using df::building_stockpilest;
 using std::placeholders::_1;
 
-static bool copystock_guard ( df::viewscreen *top );
+bool copystock_guard ( df::viewscreen *top );
 
-static command_result copystock ( color_ostream &out, vector <string> & parameters );
+command_result copystock ( color_ostream &out, vector <string> & parameters );
 
-static bool savestock_guard ( df::viewscreen *top );
+bool savestock_guard ( df::viewscreen *top );
 
-static bool loadstock_guard ( df::viewscreen *top );
+bool loadstock_guard ( df::viewscreen *top );
 
-static command_result savestock ( color_ostream &out, vector <string> & parameters );
+command_result savestock ( color_ostream &out, vector <string> & parameters );
 
-static command_result loadstock ( color_ostream &out, vector <string> & parameters );
+command_result loadstock ( color_ostream &out, vector <string> & parameters );
 
-static std::vector<std::string> list_dir ( const std::string &path, bool recursive = false );
+std::vector<std::string> list_dir ( const std::string &path, bool recursive = false );
 
-static std::vector<std::string> clean_dfstock_list ( const std::string &path );
+std::vector<std::string> clean_dfstock_list ( const std::string &path );
 
-static int stockpiles_list_settings ( lua_State *L );
+int stockpiles_list_settings ( lua_State *L );
 
-static void stockpiles_load ( color_ostream &out, std::string filename );
+void stockpiles_load ( color_ostream &out, std::string filename );
 
-static void stockpiles_save ( color_ostream &out, std::string filename );
+void stockpiles_save ( color_ostream &out, std::string filename );

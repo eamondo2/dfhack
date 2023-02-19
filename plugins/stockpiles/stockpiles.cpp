@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "StockpileIO.h"
+#include "plugin.h"
 
 #include <map>
 #include <unordered_map>
@@ -157,6 +158,7 @@ static const int32_t CYCLE_TICKS = 1200;
 static int32_t cycle_timestamp = 0; // world->frame_counter at last cycle
 
 static command_result do_command(color_ostream &out, vector<string> &parameters);
+
 static int32_t do_cycle(color_ostream &out);
 
 DFhackCExport command_result plugin_init(color_ostream &out, std::vector<PluginCommand> &commands)
@@ -279,6 +281,33 @@ static bool call_stockpiles_lua(color_ostream *out, const char *fn_name,
             nargs, nres,
             std::forward<Lua::LuaLambda&&>(args_lambda),
             std::forward<Lua::LuaLambda&&>(res_lambda));
+}
+
+static command_result do_command(color_ostream &out, vector<string> &parameters) {
+    CoreSuspender suspend;
+
+    if (!Core::getInstance().isWorldLoaded()) {
+        out.printerr("Cannot run %s without a loaded world.\n", plugin_name);
+        return CR_FAILURE;
+    }
+
+    bool show_help = false;
+    if (!call_stockpiles_lua(&out, "parse_commandline", parameters.size(), 1,
+            [&](lua_State *L) {
+                for (const string &param : parameters)
+                    Lua::Push(L, param);
+            },
+            [&](lua_State *L) {
+                show_help = !lua_toboolean(L, -1);
+            })) {
+        return CR_FAILURE;
+    }
+
+    return show_help ? CR_WRONG_USAGE : CR_OK;
+}
+
+static int32_t do_cycle(color_ostream &out) {
+    return 0;
 }
 
 DFHACK_PLUGIN_LUA_FUNCTIONS

@@ -1,33 +1,35 @@
-#include "uicommon.h"
 
-#include "modules/Gui.h"
 
 #include "df/world.h"
 #include "df/world_raws.h"
 #include "df/building_def.h"
 #include "df/viewscreen_dwarfmodest.h"
-#include "df/viewscreen_tradegoodsst.h"
 #include "df/building_stockpilest.h"
-#include "modules/Buildings.h"
-#include "modules/Items.h"
 #include "df/building_tradedepotst.h"
 #include "df/general_ref_building_holderst.h"
 #include "df/job.h"
 #include "df/job_item_ref.h"
-#include "modules/Job.h"
 #include "df/plotinfost.h"
 #include "df/mandate.h"
+
+#include "modules/Gui.h"
+#include "modules/Buildings.h"
+#include "modules/Items.h"
+#include "modules/Job.h"
 #include "modules/Maps.h"
+#include "modules/World.h"
+
+
+
+#include "PluginManager.h"
 
 using df::building_stockpilest;
 
-DFHACK_PLUGIN("autotrade");
-REQUIRE_GLOBAL(gps);
-REQUIRE_GLOBAL(world);
-REQUIRE_GLOBAL(cursor);
-REQUIRE_GLOBAL(plotinfo);
-
-static const string PERSISTENCE_KEY = "autotrade/stockpiles";
+using df::global::gps;
+using df::global::world;
+using df::global::cursor;
+using df::global::plotinfo;
+using namespace DFHack;
 
 /*
  * Depot Access
@@ -72,7 +74,8 @@ public:
         df::coord tpos(depot->centerx, depot->centery, depot->z);
         job->pos = tpos;
 
-        job->job_type = job_type::BringItemToDepot;
+        job->job_type = df::job_type::BringItemToDepot;
+        
 
         // job <-> item link
         if (!Job::attachJobItem(job, item, df::job_item_ref::Hauled))
@@ -104,13 +107,13 @@ private:
 
     bool isUsableDepot(df::building* bld)
     {
-        if (bld->getType() != building_type::TradeDepot)
+        if (bld->getType() != df::building_type::TradeDepot)
             return false;
 
         if (bld->getBuildStage() < bld->getMaxBuildStage())
             return false;
 
-        if (bld->jobs.size() == 1 && bld->jobs[0]->job_type == job_type::DestroyBuilding)
+        if (bld->jobs.size() == 1 && bld->jobs[0]->job_type == df::job_type::DestroyBuilding)
             return false;
 
         return true;
@@ -143,13 +146,13 @@ static bool is_valid_item(df::item *item)
 
         switch (ref->getType())
         {
-        case general_ref_type::CONTAINED_IN_ITEM:
+        case df::general_ref_type::CONTAINED_IN_ITEM:
             return false;
 
-        case general_ref_type::UNIT_HOLDER:
+        case df::general_ref_type::UNIT_HOLDER:
             return false;
 
-        case general_ref_type::BUILDING_HOLDER:
+        case df::general_ref_type::BUILDING_HOLDER:
             return false;
 
         default:
@@ -161,7 +164,7 @@ static bool is_valid_item(df::item *item)
     {
         df::specific_ref *ref = item->specific_refs[i];
 
-        if (ref->type == specific_ref_type::JOB)
+        if (ref->type == df::specific_ref_type::JOB)
         {
             // Ignore any items assigned to a job
             return false;
@@ -174,7 +177,7 @@ static bool is_valid_item(df::item *item)
     return true;
 }
 
-static void mark_all_in_stockpiles(vector<PersistentStockpileInfo> &stockpiles)
+static void mark_all_in_stockpiles(color_ostream &out)
 {
     if (!depot_info.findDepot())
         return;
@@ -330,16 +333,22 @@ private:
     vector<PersistentStockpileInfo> monitored_stockpiles;
 };
 
+
+
 static StockpileMonitor monitor;
 
 #define DELTA_TICKS 600
 
+
+
 DFhackCExport command_result plugin_onupdate ( color_ostream &out )
 {
+
+    
     if(!Maps::IsValid())
         return CR_OK;
 
-    if (DFHack::World::ReadPauseState())
+    if (World::ReadPauseState())
         return CR_OK;
 
     if (world->frame_counter % DELTA_TICKS != 0)

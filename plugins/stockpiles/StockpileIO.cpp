@@ -29,6 +29,8 @@
 
 #include "StockpileIO.h"
 
+#include "plugin.h"
+
 using std::vector;
 using std::string;
 using std::endl;
@@ -48,34 +50,27 @@ using std::placeholders::_1;
 */
 
 
-namespace DFHack
-{
-    DBG_DECLARE(stockpiles, status, DebugCategory::LINFO);
-    DBG_DECLARE(stockpiles, cycle, DebugCategory::LINFO);
-    DBG_DECLARE(stockpiles, perf, DebugCategory::LINFO);
-}
+command_result copystock ( color_ostream &out, vector <string> & parameters );
 
-static command_result copystock ( color_ostream &out, vector <string> & parameters );
+command_result savestock ( color_ostream &out, vector <string> & parameters );
 
-static command_result savestock ( color_ostream &out, vector <string> & parameters );
+command_result loadstock ( color_ostream &out, vector <string> & parameters );
 
-static command_result loadstock ( color_ostream &out, vector <string> & parameters );
-
-static bool copystock_guard ( color_ostream &out, df::viewscreen *top )
+bool copystock_guard ( color_ostream &out, df::viewscreen *top )
 {
      if ( !Gui::dwarfmode_hotkey ( top ) )
         return false;
 
     df::building *cur_selected = Gui::getSelectedBuilding(out);
     
-    if (!cur_selected || !cur_selected->getType() == building_type::Stockpile) {
+    if (!cur_selected || cur_selected->getType() != building_type::Stockpile) {
         return false;
     }
 
     return true;
 }
 
-static bool savestock_guard ( color_ostream &out, df::viewscreen *top )
+bool savestock_guard ( color_ostream &out, df::viewscreen *top )
 {
 
     if ( !Gui::dwarfmode_hotkey ( top ) )
@@ -83,7 +78,7 @@ static bool savestock_guard ( color_ostream &out, df::viewscreen *top )
 
     df::building *cur_selected = Gui::getSelectedBuilding(out);
     
-    if (!cur_selected || !cur_selected->getType() == building_type::Stockpile) {
+    if (!cur_selected || cur_selected->getType() != building_type::Stockpile) {
         return false;
     }
 
@@ -91,30 +86,29 @@ static bool savestock_guard ( color_ostream &out, df::viewscreen *top )
     
 }
 
-static bool loadstock_guard ( color_ostream &out, df::viewscreen *top )
+bool loadstock_guard ( color_ostream &out, df::viewscreen *top )
 {
      if ( !Gui::dwarfmode_hotkey ( top ) )
         return false;
 
     df::building *cur_selected = Gui::getSelectedBuilding(out);
     
-    if (!cur_selected || !cur_selected->getType() == building_type::Stockpile) {
+    if (!cur_selected || cur_selected->getType() != building_type::Stockpile) {
         return false;
     }
 
     return true;
 }
 
-static command_result copystock ( color_ostream &out, vector <string> & parameters )
+command_result copystock ( color_ostream &out, vector <string> & parameters )
 {
+    DEBUG(cycle, out).print("entering copystock\n");
     using df::global::plotinfo;
     using df::global::world;
     
     df::building *cur_selected = Gui::getSelectedBuilding(out);
-
     
-    
-    if (!cur_selected || !cur_selected->getType() == building_type::Stockpile) {
+    if (!cur_selected || cur_selected->getType() != building_type::Stockpile) {
         out.printerr ( "Selected building isn't a stockpile.\n" );
         return CR_WRONG_USAGE;
     }
@@ -137,12 +131,13 @@ static command_result copystock ( color_ostream &out, vector <string> & paramete
     return CR_OK;
 }
 
-
-
-
 //  exporting
-static command_result savestock ( color_ostream &out, vector <string> & parameters )
+command_result savestock ( color_ostream &out, vector <string> & parameters )
 {
+
+    using df::global::plotinfo;
+    using df::global::world;
+
     building_stockpilest *sp = virtual_cast<building_stockpilest> ( world->selected_building );
     if ( !sp )
     {
@@ -197,8 +192,12 @@ static command_result savestock ( color_ostream &out, vector <string> & paramete
 }
 
 // importing
-static command_result loadstock ( color_ostream &out, vector <string> & parameters )
+command_result loadstock ( color_ostream &out, vector <string> & parameters )
 {
+
+    using df::global::plotinfo;
+    using df::global::world;
+
     building_stockpilest *sp = virtual_cast<building_stockpilest> ( world->selected_building );
     if ( !sp )
     {
@@ -304,57 +303,8 @@ bool show_message_box ( const std::string & title,  const std::string & msg,  bo
     return true;
 }
 
-struct stockpiles_import_hook : public df::viewscreen_dwarfmodest
-{
-    typedef df::viewscreen_dwarfmodest interpose_base;
 
-    bool handleInput ( set<df::interface_key> *input )
-    {
-        if ( Gui::inRenameBuilding() )
-            return false;
-
-        df::building_stockpilest *sp = get_selected_stockpile();
-        if ( !sp )
-            return false;
-
-        if ( input->count ( interface_key::CUSTOM_L ) )
-        {
-            manage_settings ( sp );
-            return true;
-        }
-
-        return false;
-    }
-
-    DEFINE_VMETHOD_INTERPOSE ( void, feed, ( set<df::interface_key> *input ) )
-    {
-        if ( !handleInput ( input ) )
-            INTERPOSE_NEXT ( feed ) ( input );
-    }
-
-    DEFINE_VMETHOD_INTERPOSE ( void, render, () )
-    {
-        INTERPOSE_NEXT ( render ) ();
-
-        df::building_stockpilest *sp = get_selected_stockpile();
-        if ( !sp )
-            return;
-
-        auto dims = Gui::getDwarfmodeViewDims();
-        int left_margin = dims.menu_x1 + 1;
-        int x = left_margin;
-        int y = dims.y2 - 3; // below autodump, automelt, autotrade, stocks; above stockflow
-        OutputHotkeyString ( x, y, "Load/Save Settings", "l", true, left_margin, COLOR_WHITE, COLOR_LIGHTRED );
-    }
-};
-
-IMPLEMENT_VMETHOD_INTERPOSE ( stockpiles_import_hook, feed );
-IMPLEMENT_VMETHOD_INTERPOSE ( stockpiles_import_hook, render );
-
-DFHACK_PLUGIN_IS_ENABLED ( is_enabled );
-
-
-static std::vector<std::string> list_dir ( const std::string &path, bool recursive = false )
+std::vector<std::string> list_dir ( const std::string &path, bool recursive)
 {
 //     color_ostream_proxy out ( Core::getInstance().getConsole() );
     std::vector<std::string> files;
@@ -393,7 +343,7 @@ static std::vector<std::string> list_dir ( const std::string &path, bool recursi
     return files;
 }
 
-static std::vector<std::string> clean_dfstock_list ( const std::string &path )
+std::vector<std::string> clean_dfstock_list ( const std::string &path )
 {
     if ( !Filesystem::exists ( path ) )
     {
@@ -412,7 +362,7 @@ static std::vector<std::string> clean_dfstock_list ( const std::string &path )
     return files;
 }
 
-static int stockpiles_list_settings ( lua_State *L )
+int stockpiles_list_settings ( lua_State *L )
 {
     auto path = luaL_checkstring ( L, 1 );
     if ( Filesystem::exists ( path ) && !Filesystem::isdir ( path ) )
@@ -429,7 +379,7 @@ static int stockpiles_list_settings ( lua_State *L )
 const std::string err_title = "Stockpile Settings Error";
 const std::string err_help = "Does the folder exist?\nCheck the console for more information.";
 
-static void stockpiles_load ( color_ostream &out, std::string filename )
+void stockpiles_load ( color_ostream &out, std::string filename )
 {
     std::vector<std::string> params;
     params.push_back ( filename );
@@ -439,7 +389,7 @@ static void stockpiles_load ( color_ostream &out, std::string filename )
 }
 
 
-static void stockpiles_save ( color_ostream &out, std::string filename )
+void stockpiles_save ( color_ostream &out, std::string filename )
 {
     std::vector<std::string> params;
     params.push_back ( filename );
@@ -448,16 +398,3 @@ static void stockpiles_save ( color_ostream &out, std::string filename )
         show_message_box ( err_title, "Couldn't save. " + err_help,  true );
 }
 
-
-DFHACK_PLUGIN_LUA_FUNCTIONS
-{
-    DFHACK_LUA_FUNCTION ( stockpiles_load ),
-    DFHACK_LUA_FUNCTION ( stockpiles_save ),
-    DFHACK_LUA_END
-};
-
-DFHACK_PLUGIN_LUA_COMMANDS
-{
-    DFHACK_LUA_COMMAND ( stockpiles_list_settings ),
-    DFHACK_LUA_END
-};
